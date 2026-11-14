@@ -1,0 +1,24 @@
+filegrid:
+  policies:
+    METER_READING:
+      storage: DATABASE
+      max-file-size: 64KB
+      max-concurrent-uploads: 200
+      require-idempotency-key: true
+
+    INCIDENT_RECORDING:
+      storage: FTP
+      max-file-size: 20MB
+      max-concurrent-uploads: 40
+
+    CONNECTION_DOCUMENT:
+      storage: FTP
+      max-file-size: 15MB
+      max-concurrent-uploads: 20
+      encrypt-at-rest: true
+      audit-access: true
+
+    DRONE_VIDEO:
+      storage: S3
+      max-file-size: 5GB
+      max-concurrent-uploads: 6

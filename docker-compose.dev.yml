@@ -1,0 +1,26 @@
+services:
+  catalog-db:
+    ports: ["127.0.0.1:5433:5432"]
+    networks: [internal, dev]
+
+  db-storage:
+    ports: ["127.0.0.1:5434:5432"]
+    networks: [internal, dev]
+
+  ftp-storage:
+    ports:
+      - "127.0.0.1:21:21"
+      - "127.0.0.1:21000-21010:21000-21010"
+    networks: [internal, dev]
+
+  s3-storage:
+    environment:
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    networks: [internal, dev]
+
+networks:
+  dev: {}
