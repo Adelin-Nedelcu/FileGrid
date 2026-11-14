@@ -1,0 +1,27 @@
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">FG</span>
+    <div>
+      <h1>FileGrid</h1>
+      <p>Punct unic de intrare pentru fișierele din teren · Rețele Electrice</p>
+    </div>
+  </div>
+
+  <div class="storages" aria-label="Starea storage-urilor">
+    @if (status(); as s) {
+      @for (t of storageTypes; track t) {
+        <span class="pill" [class.down]="!s.storages[t]?.up">
+          <span class="dot"></span>{{ t }} {{ s.storages[t]?.up ? 'online' : 'indisponibil' }}
+        </span>
+      }
+    } @else if (statusError(); as e) {
+      <span class="pill down"><span class="dot"></span>Backend indisponibil</span>
+    }
+  </div>
+</header>
+
+<main>
+  <app-upload-panel [policies]="status()?.policies ?? {}" (uploaded)="onUploaded()" />
+
+  <app-file-list [refresh]="refreshTick()" />
+</main>

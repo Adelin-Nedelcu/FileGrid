@@ -1,0 +1,101 @@
+<section class="card">
+  <h2>Fișiere stocate</h2>
+
+  <form class="filters" (ngSubmit)="search()">
+    <select [ngModel]="category()" name="category" (ngModelChange)="category.set($event); search()">
+      <option value="">Toate categoriile</option>
+      @for (c of categories; track c) {
+        <option [value]="c">{{ labels[c] }}</option>
+      }
+    </select>
+    <select [ngModel]="region()" name="region" (ngModelChange)="region.set($event); search()">
+      <option value="">Toate zonele</option>
+      @for (g of regions; track g.group) {
+        <optgroup [label]="g.group">
+          @for (county of g.counties; track county.code) {
+            <option [value]="county.code">{{ county.name }}</option>
+          }
+        </optgroup>
+      }
+    </select>
+    <input type="search" [(ngModel)]="query" name="q" placeholder="Caută după nume, descriere, contor…" />
+    <button type="submit">Caută</button>
+  </form>
+
+  @if (error(); as e) {
+    <p class="error">{{ e }}</p>
+  }
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Nume</th>
+          <th>Categorie</th>
+          <th>Zonă</th>
+          <th class="num">Dimensiune</th>
+          <th>Stocat la</th>
+          <th>Storage</th>
+          <th>Integritate</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (f of items(); track f.id) {
+          <tr>
+            <td class="name">
+              {{ f.name }}
+              @if (f.encrypted) {
+                <span class="tag">criptat</span>
+              }
+              @if (f.description) {
+                <div class="muted">{{ f.description }}</div>
+              }
+            </td>
+            <td>{{ labels[f.category] }}</td>
+            <td>{{ regionName(f.region) }}</td>
+            <td class="num">{{ f.sizeBytes | bytes }}</td>
+            <td>{{ f.storedAt | date: 'dd.MM.yyyy HH:mm:ss' }}</td>
+            <td><span class="tag">{{ f.storage }}</span></td>
+            <td class="integrity" [title]="'SHA-256: ' + (f.sha256 ?? '—')">
+              @let v = verification(f.id);
+              @if (v === 'pending') {
+                <span class="muted">se verifică…</span>
+              } @else if (isResult(v)) {
+                <span [class]="v.match ? 'ok' : 'bad'" [title]="v.detail">
+                  {{ v.match ? '✓ identic' : '✗ CORUPT' }} ({{ v.durationMs }} ms)
+                </span>
+              } @else if (v) {
+                <span class="bad" [title]="v">eroare</span>
+              } @else if (f.lastVerificationOk === true) {
+                <span class="ok" [title]="'Ultima verificare: ' + (f.lastVerifiedAt | date: 'dd.MM.yyyy HH:mm:ss')">✓ identic</span>
+              } @else if (f.lastVerificationOk === false) {
+                <span class="bad" [title]="'Ultima verificare: ' + (f.lastVerifiedAt | date: 'dd.MM.yyyy HH:mm:ss')">✗ CORUPT</span>
+              } @else {
+                <span class="muted">neverificat</span>
+              }
+            </td>
+            <td>
+              <div class="row-actions">
+                <a [href]="contentUrl(f.id)" download>Descarcă</a>
+                <button type="button" class="link" (click)="verify(f)">Verifică</button>
+              </div>
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="8" class="muted center">
+              {{ loading() ? 'Se încarcă…' : 'Niciun fișier găsit.' }}
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pager">
+    <button type="button" class="secondary" (click)="page.set(page() - 1)" [disabled]="page() === 0">‹ Anterior</button>
+    <span>Pagina {{ page() + 1 }} din {{ lastPage() + 1 }} · {{ total() }} fișiere</span>
+    <button type="button" class="secondary" (click)="page.set(page() + 1)" [disabled]="page() >= lastPage()">Următor ›</button>
+  </div>
+</section>
