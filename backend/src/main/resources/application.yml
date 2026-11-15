@@ -1,0 +1,98 @@
+spring:
+  application:
+    name: filegrid
+  config:
+    import:
+      - optional:file:${FILEGRID_POLICY_FILE:../config/filegrid-policies.yml}
+      - optional:file:./config/filegrid-policies.yml
+      - optional:file:${FILEGRID_USERS_FILE:../config/filegrid-users.yml}
+      - optional:file:./config/filegrid-users.yml
+      - optional:file:../.env[.properties]
+      - optional:file:./.env[.properties]
+  threads:
+    virtual:
+      enabled: true
+  servlet:
+    multipart:
+      enabled: false
+  datasource:
+    url: jdbc:postgresql://${CATALOG_DB_HOST:localhost}:${CATALOG_DB_PORT:5433}/${CATALOG_DB_NAME:filegrid_catalog}
+    username: ${CATALOG_DB_USER}
+    password: ${CATALOG_DB_PASSWORD}
+    hikari:
+      pool-name: catalog-db
+      maximum-pool-size: 30
+      connection-timeout: 5000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  port: 8080
+  shutdown: graceful
+  forward-headers-strategy: framework
+  tomcat:
+    connection-timeout: 120s
+    max-swallow-size: -1
+
+filegrid:
+  storage:
+    health-check-interval: 10s
+    s3:
+      endpoint: ${S3_ENDPOINT:http://localhost:9000}
+      region: ${S3_REGION:eu-central-1}
+      bucket: ${S3_BUCKET:filegrid}
+      access-key: ${S3_ACCESS_KEY}
+      secret-key: ${S3_SECRET_KEY}
+    ftp:
+      host: ${FTP_HOST:localhost}
+      port: ${FTP_PORT:21}
+      username: ${FTP_USER}
+      password: ${FTP_PASSWORD}
+    database:
+      url: jdbc:postgresql://${STORAGE_DB_HOST:localhost}:${STORAGE_DB_PORT:5434}/${STORAGE_DB_NAME:filegrid_storage}
+      username: ${STORAGE_DB_USER}
+      password: ${STORAGE_DB_PASSWORD}
+      max-object-size: 50MB
+  encryption:
+    key: ${FILEGRID_ENCRYPTION_KEY:}
+  upload:
+    bulkhead-wait: 2s
+    stale-pending-after: 2m
+    chunk-size: 5MB
+    session-ttl: 24h
+    stalled-after: 10m
+  security:
+    jwt-secret: ${FILEGRID_JWT_SECRET}
+    meter-master-key: ${METER_MASTER_KEY}
+    session-duration: 8h
+    secure-cookie: ${FILEGRID_SECURE_COOKIE:true}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, metrics
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState, db
+  metrics:
+    tags:
+      application: filegrid
+
+logging:
+  pattern:
+    correlation: "[%X{requestId:-}] "
+  level:
+    ro.ppc.filegrid: INFO
