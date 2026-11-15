@@ -1,0 +1,33 @@
+groups:
+  - name: indicatori
+    interval: 15s
+    rules:
+      - record: filegrid:latenta_secunde:p50
+        expr: histogram_quantile(0.50, sum by (le, category, storage, operation) (rate(filegrid_storage_operation_seconds_bucket[5m])))
+
+      - record: filegrid:latenta_secunde:p95
+        expr: histogram_quantile(0.95, sum by (le, category, storage, operation) (rate(filegrid_storage_operation_seconds_bucket[5m])))
+
+      - record: filegrid:latenta_secunde:p99
+        expr: histogram_quantile(0.99, sum by (le, category, storage, operation) (rate(filegrid_storage_operation_seconds_bucket[5m])))
+
+      - record: filegrid:operatii_pe_secunda
+        expr: sum by (category, storage, operation) (rate(filegrid_storage_operation_seconds_count[5m]))
+
+      - record: filegrid:bytes_pe_secunda
+        expr: sum by (category, storage, operation) (rate(filegrid_storage_transferred_bytes_sum[5m]))
+
+      - record: filegrid:rata_erori
+        expr: sum by (category, storage) (rate(filegrid_storage_operation_seconds_count{outcome=~"error|integrity_error"}[5m])) / sum by (category, storage) (rate(filegrid_storage_operation_seconds_count[5m]))
+
+      - record: filegrid:incarcari_pe_minut
+        expr: 60 * sum by (category) (rate(filegrid_storage_operation_seconds_count{operation="write",outcome="success"}[2m]))
+
+      - record: filegrid:incarcari_pe_minut:obisnuit
+        expr: 60 * sum by (category) (rate(filegrid_storage_operation_seconds_count{operation="write",outcome="success"}[1h] offset 10m))
+
+      - record: filegrid:anomalii_la_mia_de_citiri
+        expr: 1000 * sum by (region) (increase(filegrid_meter_anomalies_total[30m])) / sum by (region) (increase(filegrid_meter_readings_analyzed_total[30m]))
+
+      - record: filegrid:masuratoare_secunde:p95
+        expr: histogram_quantile(0.95, sum by (le, category, storage, operation) (filegrid_benchmark_operation_seconds_bucket))

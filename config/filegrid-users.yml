@@ -1,0 +1,19 @@
+filegrid:
+  security:
+    users:
+      admin:
+        display-name: Administrator
+        roles: [ADMIN]
+        password: ${PASSWORD_ADMIN}
+      dispecer:
+        display-name: Dispecerat
+        roles: [DISPECERAT]
+        password: ${PASSWORD_DISPECER}
+      teren:
+        display-name: Echipa de teren
+        roles: [TEREN]
+        password: ${PASSWORD_TEREN}
+      racordari:
+        display-name: Birou racordari
+        roles: [RACORDARI]
+        password: ${PASSWORD_RACORDARI}

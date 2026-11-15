@@ -1,0 +1,216 @@
+groups:
+  - name: citiri-contoare
+    rules:
+      - alert: CitiriContorStorageCazut
+        expr: max by (category, storage) (filegrid_category_storage{category="METER_READING"}) * on (storage) group_left () max by (storage) (filegrid_storage_up) == 0
+        for: 30s
+        labels:
+          severity: critical
+          cerinta: "Nicio citire de contor nu se pierde si nu se dubleaza"
+        annotations:
+          summary: "Citirile de contor nu mai pot fi stocate: storage-ul {{ $labels.storage }} nu raspunde"
+          description: "Contoarele isi pastreaza citirile si reincearca, dar memoria lor e limitata. Daca storage-ul {{ $labels.storage }} nu revine, citirile se vor pierde si facturile vor fi gresite."
+          actiune: "Verificati serviciul de storage ({{ $labels.storage }}): docker compose ps, docker compose logs."
+
+      - alert: CitiriContorRespinse
+        expr: sum(rate(filegrid_storage_operation_seconds_count{category="METER_READING",operation="write",outcome="error"}[1m])) / sum(rate(filegrid_storage_operation_seconds_count{category="METER_READING",operation="write"}[1m])) > 0.05
+        for: 30s
+        labels:
+          severity: critical
+          cerinta: "Nicio citire de contor nu se pierde si nu se dubleaza"
+        annotations:
+          summary: "{{ $value | humanizePercentage }} din citirile de contor esueaza la scriere"
+          description: "FileGrid nu poate confirma citirile primite. Contoarele reincearca, dar citirile raman neconfirmate cat timp dureaza problema."
+          actiune: "Verificati log-ul backend-ului si starea storage-ului folosit de citiri."
+
+      - alert: CitiriContorSupraincarcare
+        expr: sum(rate(filegrid_bulkhead_rejected_total{category="METER_READING"}[1m])) > 0
+        for: 30s
+        labels:
+          severity: warning
+          cerinta: "Nicio citire de contor nu se pierde si nu se dubleaza"
+        annotations:
+          summary: "Citiri de contor amanate: categoria e la capacitate maxima"
+          description: "Sosesc mai multe citiri decat pot fi scrise simultan ({{ $value | humanize }} respinse pe secunda cu 429). Contoarele reincearca, deci nu se pierd inca, dar intarzierea creste."
+          actiune: "Adaugati instante de backend (docker compose up -d --scale backend=3) sau mariti max-concurrent-uploads in politica."
+
+      - alert: CitiriContorFluxOprit
+        expr: sum(rate(filegrid_storage_operation_seconds_count{category="METER_READING",operation="write",outcome="success"}[2m])) == 0 and sum(rate(filegrid_storage_operation_seconds_count{category="METER_READING",operation="write",outcome="success"}[2m] offset 5m)) > 0
+        for: 1m
+        labels:
+          severity: critical
+          cerinta: "Nicio citire de contor nu se pierde si nu se dubleaza"
+        annotations:
+          summary: "Nu a mai fost confirmata nicio citire de contor in ultimele 2 minute"
+          description: "Acum 5 minute citirile soseau normal. Fie contoarele nu mai ajung la FileGrid (retea, gateway, autentificare), fie toate scrierile esueaza."
+          actiune: "Verificati gateway-ul, simulatorul/contoarele si storage-ul citirilor."
+
+      - alert: CitiriContorRetransmiseMasiv
+        expr: sum(rate(filegrid_duplicates_total{category="METER_READING"}[2m])) / sum(rate(filegrid_storage_operation_seconds_count{category="METER_READING",operation="write",outcome="success"}[2m])) > 0.2
+        for: 1m
+        labels:
+          severity: warning
+          cerinta: "Nicio citire de contor nu se pierde si nu se dubleaza"
+        annotations:
+          summary: "Contoarele retrimit multe citiri deja stocate"
+          description: "Retransmisiile sunt recunoscute si nu se dubleaza nimic, dar volumul lor arata ca raspunsurile de confirmare nu ajung la contoare (retea instabila intre contoare si FileGrid)."
+          actiune: "Verificati conexiunea dintre contoare si gateway."
+
+  - name: inregistrari-avarie
+    rules:
+      - alert: AvariiStorageCazut
+        expr: max by (category, storage) (filegrid_category_storage{category="INCIDENT_RECORDING"}) * on (storage) group_left () max by (storage) (filegrid_storage_up) == 0
+        for: 30s
+        labels:
+          severity: critical
+          cerinta: "Inregistrarile de avarie sunt disponibile imediat pentru dispecerat"
+        annotations:
+          summary: "Dispeceratul nu mai are acces la inregistrarile de avarie: storage-ul {{ $labels.storage }} nu raspunde"
+          description: "Inregistrarile existente nu pot fi citite, iar cele noi nu pot fi incarcate pana cand storage-ul {{ $labels.storage }} revine."
+          actiune: "Reporniti storage-ul sau mutati temporar categoria pe alt storage din config/filegrid-policies.yml."
+
+      - alert: AvariiIncarcareLenta
+        expr: histogram_quantile(0.95, sum by (le) (rate(filegrid_storage_operation_seconds_bucket{category="INCIDENT_RECORDING",operation="write",outcome="success"}[2m]))) > 5
+        for: 1m
+        labels:
+          severity: warning
+          cerinta: "Inregistrarile de avarie sunt disponibile imediat pentru dispecerat"
+        annotations:
+          summary: "Inregistrarile de avarie ajung greu in sistem (p95 = {{ $value | humanizeDuration }})"
+          description: "95% dintre incarcari dureaza peste 5 secunde, deci dispeceratul vede inregistrarile cu intarziere."
+          actiune: "Verificati incarcarea storage-ului si luati in calcul alt storage pentru aceasta categorie."
+
+      - alert: AvariiRespinse
+        expr: sum(rate(filegrid_bulkhead_rejected_total{category="INCIDENT_RECORDING"}[1m])) > 0 or sum(rate(filegrid_storage_operation_seconds_count{category="INCIDENT_RECORDING",outcome="error"}[1m])) > 0
+        for: 30s
+        labels:
+          severity: critical
+          cerinta: "Inregistrarile de avarie sunt disponibile imediat pentru dispecerat"
+        annotations:
+          summary: "Inregistrari de avarie care nu pot fi incarcate sau citite"
+          description: "Exista cereri pentru inregistrari de avarie care esueaza sau sunt amanate (varf de incarcare ori storage cu probleme)."
+          actiune: "Verificati starea storage-ului si capacitatea categoriei (max-concurrent-uploads)."
+
+  - name: documente-racordare
+    rules:
+      - alert: DocumenteRacordareNecriptate
+        expr: max(filegrid_policy_encrypt_at_rest{category="CONNECTION_DOCUMENT"}) == 0
+        for: 10s
+        labels:
+          severity: critical
+          cerinta: "Datele personale raman protejate si verificabile la audit"
+        annotations:
+          summary: "Documentele de racordare se stocheaza NECRIPTAT"
+          description: "Politica pentru CONNECTION_DOCUMENT are criptarea dezactivata. Documentele incarcate de acum contin date personale lizibile direct din storage."
+          actiune: "Setati encrypt-at-rest: true in config/filegrid-policies.yml si reporniti backend-ul."
+
+      - alert: DocumenteRacordareFaraAudit
+        expr: max(filegrid_policy_audit_access{category="CONNECTION_DOCUMENT"}) == 0
+        for: 10s
+        labels:
+          severity: critical
+          cerinta: "Datele personale raman protejate si verificabile la audit"
+        annotations:
+          summary: "Accesul la documentele de racordare nu mai este auditat"
+          description: "Politica pentru CONNECTION_DOCUMENT are jurnalul de audit dezactivat, deci nu se mai poate dovedi cine a accesat date personale."
+          actiune: "Setati audit-access: true in config/filegrid-policies.yml si reporniti backend-ul."
+
+      - alert: DocumenteRacordareAccesNeautorizat
+        expr: sum(increase(filegrid_access_denied_total{category="CONNECTION_DOCUMENT"}[5m])) >= 3
+        labels:
+          severity: warning
+          cerinta: "Datele personale raman protejate si verificabile la audit"
+        annotations:
+          summary: "Incercari repetate de acces neautorizat la documentele de racordare"
+          description: "{{ $value | humanize }} cereri au fost refuzate in ultimele 5 minute pentru conturi fara drept de acces la date personale. Incercarile sunt in jurnalul de audit."
+          actiune: "Verificati tabela file_access_log (action = ACCESS_DENIED) pentru conturile implicate."
+
+      - alert: DocumenteRacordareStorageCazut
+        expr: max by (category, storage) (filegrid_category_storage{category="CONNECTION_DOCUMENT"}) * on (storage) group_left () max by (storage) (filegrid_storage_up) == 0
+        for: 30s
+        labels:
+          severity: warning
+          cerinta: "Datele personale raman protejate si verificabile la audit"
+        annotations:
+          summary: "Documentele de racordare sunt indisponibile: storage-ul {{ $labels.storage }} nu raspunde"
+          description: "Documentele nu pot fi incarcate sau consultate pana cand storage-ul revine."
+          actiune: "Verificati serviciul de storage ({{ $labels.storage }})."
+
+  - name: video-drona
+    rules:
+      - alert: VideoStorageCazut
+        expr: max by (category, storage) (filegrid_category_storage{category="DRONE_VIDEO"}) * on (storage) group_left () max by (storage) (filegrid_storage_up) == 0
+        for: 30s
+        labels:
+          severity: critical
+          cerinta: "Transferul video-urilor rezista pe conexiuni lente sau instabile"
+        annotations:
+          summary: "Video-urile de inspectie nu pot fi transferate: storage-ul {{ $labels.storage }} nu raspunde"
+          description: "Transferurile in curs se opresc si se reiau automat cand storage-ul revine; partile deja primite se pastreaza."
+          actiune: "Verificati serviciul de storage ({{ $labels.storage }})."
+
+      - alert: VideoTransferuriBlocate
+        expr: max(filegrid_uploads_stalled{category="DRONE_VIDEO"}) > 0
+        for: 1m
+        labels:
+          severity: warning
+          cerinta: "Transferul video-urilor rezista pe conexiuni lente sau instabile"
+        annotations:
+          summary: "{{ $value | humanize }} transferuri video incepute nu mai avanseaza"
+          description: "Exista video-uri incarcate partial, fara nicio parte noua in ultimele 10 minute. Echipa din teren a pierdut conexiunea sau a abandonat transferul."
+          actiune: "Contactati echipa din teren; transferul se reia din punctul in care a ramas cand selecteaza din nou acelasi fisier."
+
+      - alert: VideoTransferuriIntrerupteDes
+        expr: sum(rate(filegrid_storage_operation_seconds_count{category="DRONE_VIDEO",operation="write",outcome="client_abort"}[5m])) / sum(rate(filegrid_storage_operation_seconds_count{category="DRONE_VIDEO",operation="write"}[5m])) > 0.3
+        for: 2m
+        labels:
+          severity: warning
+          cerinta: "Transferul video-urilor rezista pe conexiuni lente sau instabile"
+        annotations:
+          summary: "{{ $value | humanizePercentage }} din bucatile de video se intrerup in timpul transferului"
+          description: "Conexiunea echipelor din teren este foarte instabila. Transferurile continua prin reincercari automate, dar dureaza mult."
+          actiune: "Daca situatia persista, micsorati filegrid.upload.chunk-size ca sa se piarda mai putin la fiecare intrerupere."
+
+  - name: sistem
+    rules:
+      - alert: FileGridIndisponibil
+        expr: absent(up{job="filegrid"} == 1)
+        for: 30s
+        labels:
+          severity: critical
+          cerinta: "Toate cerintele din tabelul 2.1"
+        annotations:
+          summary: "Nicio instanta FileGrid nu raspunde"
+          description: "Nu se pot incarca sau descarca fisiere din nicio categorie, iar contoarele nu isi pot trimite citirile."
+          actiune: "docker compose ps; docker compose logs backend"
+
+      - alert: VarfDeVolum
+        expr: filegrid:incarcari_pe_minut > 10 and filegrid:incarcari_pe_minut > 3 * (filegrid:incarcari_pe_minut:obisnuit or filegrid:incarcari_pe_minut * 0)
+        for: 1m
+        labels:
+          severity: info
+          cerinta: "Un varf intr-o categorie nu degradeaza celelalte categorii"
+        annotations:
+          summary: "Varf de volum in categoria {{ $labels.category }}: {{ $value | humanize }} incarcari pe minut"
+          description: "Volumul categoriei este de cel putin 3 ori peste cel din ultima ora. Limita de scrieri simultane a categoriei protejeaza celelalte categorii, dar merita urmarite."
+          actiune: "Comparati latentele pe categorii (filegrid:latenta_secunde:p95 in Prometheus sau pagina Statistici). Daca apar respingeri, adaugati instante de backend."
+
+      - alert: FisierCorupt
+        expr: sum by (category, storage) (increase(filegrid_integrity_failures_total[5m])) > 0
+        labels:
+          severity: critical
+          cerinta: "Fisierul recuperat este identic cu cel stocat"
+        annotations:
+          summary: "Fisier corupt sau lipsa detectat in {{ $labels.storage }} ({{ $labels.category }})"
+          description: "Continutul din storage nu mai corespunde cu amprenta SHA-256 salvata la incarcare. Fisierul nu a fost livrat utilizatorului."
+          actiune: "Cautati INTEGRITATE in log-ul backend-ului pentru id-ul fisierului si verificati storage-ul {{ $labels.storage }}."
+
+      - alert: AutentificariEsuateRepetate
+        expr: sum by (type) (increase(filegrid_auth_failures_total[5m])) >= 10
+        labels:
+          severity: warning
+          cerinta: "Accesul la FileGrid este autentificat"
+        annotations:
+          summary: "Multe autentificari esuate ({{ $labels.type }})"
+          description: "{{ $value | humanize }} incercari esuate in 5 minute. Poate fi o incercare de ghicire a parolelor sau un dispozitiv cu cheie gresita."
+          actiune: "Verificati log-ul backend-ului (Autentificare esuata) si log-ul gateway-ului pentru adresa sursa."

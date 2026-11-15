@@ -9,16 +9,115 @@ services:
       TLS_HOSTNAME: ${TLS_HOSTNAME:-localhost}
     volumes:
       - gateway_certs:/etc/nginx/certs
+      - gateway_ca:/etc/nginx/ca
     depends_on:
       backend:
         condition: service_healthy
     networks: [edge, internal]
     restart: unless-stopped
 
+  simulator:
+    build: ./simulator
+    environment:
+      SIM_TARGET_URL: https://gateway
+      SIM_CA_CERT: /certs/ca.crt
+      SIM_CONFIG: /config/simulator.properties
+      METER_MASTER_KEY: ${METER_MASTER_KEY:?lipseste din .env - ruleaza start.ps1 sau start.sh}
+    volumes:
+      - ./config:/config:ro
+      - gateway_ca:/certs:ro
+    depends_on:
+      - gateway
+    deploy:
+      resources:
+        limits:
+          memory: 384m
+    networks: [edge]
+    restart: unless-stopped
+
+  storm:
+    build: ./simulator
+    profiles: [storm]
+    entrypoint: ["java", "-cp", "/app/simulator.jar", "ro.ppc.filegrid.simulator.Storm"]
+    environment:
+      SIM_TARGET_URL: https://gateway
+      SIM_CA_CERT: /certs/ca.crt
+      STORM_CONFIG: /config/storm.properties
+      STORM_USER: dispecer
+      STORM_PASSWORD: ${PASSWORD_DISPECER:?lipseste din .env - ruleaza start.ps1 sau start.sh}
+      STORM_DOCS_USER: racordari
+      STORM_DOCS_PASSWORD: ${PASSWORD_RACORDARI:?lipseste din .env - ruleaza start.ps1 sau start.sh}
+    volumes:
+      - ./config:/config:ro
+      - gateway_ca:/certs:ro
+    depends_on:
+      - gateway
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+    networks: [edge]
+
+  bad-network:
+    build: ./tools/bad-network
+    profiles: [degraded]
+    cap_add: [NET_ADMIN]
+    environment:
+      NETEM_DELAY: ${NETEM_DELAY:-300ms}
+      NETEM_JITTER: ${NETEM_JITTER:-100ms}
+      NETEM_LOSS: ${NETEM_LOSS:-5%}
+      NETEM_RATE: ${NETEM_RATE:-8mbit}
+    ports:
+      - "${DEGRADED_PORT:-8444}:443"
+    depends_on:
+      - gateway
+    networks: [edge]
+
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./observability/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks: [internal, ops]
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.34.2
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./observability/alertmanager:/etc/alertmanager:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+    networks: [ops]
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:v1.32.0
+    ports:
+      - "127.0.0.1:8025:8025"
+    networks: [ops]
+    restart: unless-stopped
+
   backend:
     build: ./backend
     environment:
       FILEGRID_POLICY_FILE: /config/filegrid-policies.yml
+      FILEGRID_USERS_FILE: /config/filegrid-users.yml
+      FILEGRID_JWT_SECRET: ${FILEGRID_JWT_SECRET:?lipseste din .env - ruleaza start.ps1 sau start.sh}
+      METER_MASTER_KEY: ${METER_MASTER_KEY:?lipseste din .env - ruleaza start.ps1 sau start.sh}
+      PASSWORD_ADMIN: ${PASSWORD_ADMIN:?lipseste din .env - ruleaza start.ps1 sau start.sh}
+      PASSWORD_DISPECER: ${PASSWORD_DISPECER:?lipseste din .env - ruleaza start.ps1 sau start.sh}
+      PASSWORD_TEREN: ${PASSWORD_TEREN:?lipseste din .env - ruleaza start.ps1 sau start.sh}
+      PASSWORD_RACORDARI: ${PASSWORD_RACORDARI:?lipseste din .env - ruleaza start.ps1 sau start.sh}
       CATALOG_DB_HOST: catalog-db
       CATALOG_DB_PORT: "5432"
       CATALOG_DB_NAME: filegrid_catalog
@@ -83,11 +182,11 @@ services:
     restart: unless-stopped
 
   ftp-storage:
-    image: delfer/alpine-ftp-server:latest
+    image: delfer/alpine-ftp-server@sha256:b27013e7436cea343826ba7edb77aa3a8b2d22df14e366b82d10a3b0b5ecc880
     environment:
       USERS: "${FTP_USER:?lipseste din .env - ruleaza start.ps1 sau start.sh}|${FTP_PASSWORD:?lipseste din .env - ruleaza start.ps1 sau start.sh}|/ftp/data|10000"
       MIN_PORT: "21000"
-      MAX_PORT: "21010"
+      MAX_PORT: "21399"
     volumes:
       - ftp_data:/ftp/data
     healthcheck:
@@ -120,9 +219,13 @@ networks:
   edge: {}
   internal:
     internal: true
+  ops: {}
 
 volumes:
   gateway_certs:
+  gateway_ca:
+  prometheus_data:
+  alertmanager_data:
   catalog_data:
   storage_db_data:
   ftp_data:

@@ -8,9 +8,11 @@ services:
     networks: [internal, dev]
 
   ftp-storage:
+    environment:
+      MAX_PORT: "21039"
     ports:
       - "127.0.0.1:21:21"
-      - "127.0.0.1:21000-21010:21000-21010"
+      - "127.0.0.1:21000-21039:21000-21039"
     networks: [internal, dev]
 
   s3-storage:

@@ -1,0 +1,33 @@
+global:
+  resolve_timeout: 1m
+  smtp_smarthost: "mailpit:1025"
+  smtp_from: "alerte@filegrid.local"
+  smtp_require_tls: false
+
+route:
+  receiver: echipa
+  group_by: [alertname, category, storage]
+  group_wait: 5s
+  group_interval: 30s
+  repeat_interval: 30m
+
+receivers:
+  - name: echipa
+    email_configs:
+      - to: "echipa-filegrid@ppc.local"
+        send_resolved: true
+        headers:
+          Subject: '[FileGrid] {{ if eq .Status "resolved" }}REZOLVAT: {{ end }}{{ .CommonAnnotations.summary }}'
+        html: |
+          <h2 style="color:{{ if eq .Status "resolved" }}#1a7f37{{ else }}#c62828{{ end }}">
+            {{ if eq .Status "resolved" }}Rezolvat{{ else }}Cerinta de business in pericol{{ end }}
+          </h2>
+          {{ range .Alerts }}
+          <p><b>{{ .Annotations.summary }}</b></p>
+          <p><b>Cerinta:</b> {{ .Labels.cerinta }}<br>
+             <b>Severitate:</b> {{ .Labels.severity }}<br>
+             <b>De la:</b> {{ .StartsAt.Format "02.01.2006 15:04:05 MST" }}</p>
+          <p>{{ .Annotations.description }}</p>
+          <p><b>Ce e de facut:</b> {{ .Annotations.actiune }}</p>
+          <hr>
+          {{ end }}
