@@ -1,7 +1,7 @@
-import { HttpClient, HttpErrorResponse, HttpEvent, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { DataCategory, FileRecord, FileSearch, Page, SystemStatus, VerificationResult } from './models';
+import { AuditEntry, FileRecord, FileSearch, Page, Stats, SystemStatus, VerificationResult } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class FileGridApi {
@@ -13,32 +13,29 @@ export class FileGridApi {
 
   search(filter: FileSearch): Observable<Page<FileRecord>> {
     let params = new HttpParams().set('page', filter.page ?? 0).set('size', filter.size ?? 20);
-    if (filter.category) params = params.set('category', filter.category);
+    for (const category of filter.categories ?? []) params = params.append('category', category);
     if (filter.q?.trim()) params = params.set('q', filter.q.trim());
     if (filter.region) params = params.set('region', filter.region);
     return this.http.get<Page<FileRecord>>('/api/files', { params });
   }
 
-  upload(
-    file: File,
-    meta: { category: DataCategory; region?: string; description?: string; idempotencyKey: string },
-  ): Observable<HttpEvent<FileRecord>> {
-    let params = new HttpParams().set('category', meta.category).set('name', file.name);
-    if (meta.region) params = params.set('region', meta.region);
-    if (meta.description?.trim()) params = params.set('description', meta.description.trim());
-    return this.http.post<FileRecord>('/api/files', file, {
-      params,
-      headers: {
-        'Content-Type': file.type || 'application/octet-stream',
-        'Idempotency-Key': meta.idempotencyKey,
-      },
-      reportProgress: true,
-      observe: 'events',
-    });
-  }
-
   verify(id: string): Observable<VerificationResult> {
     return this.http.post<VerificationResult>(`/api/files/${id}/verify`, null);
+  }
+
+  audit(filter: { action?: string; q?: string; page: number; size: number }): Observable<Page<AuditEntry>> {
+    let params = new HttpParams().set('page', filter.page).set('size', filter.size);
+    if (filter.action) params = params.set('action', filter.action);
+    if (filter.q?.trim()) params = params.set('q', filter.q.trim());
+    return this.http.get<Page<AuditEntry>>('/api/audit', { params });
+  }
+
+  stats(hours: number): Observable<Stats> {
+    return this.http.get<Stats>('/api/stats', { params: { hours } });
+  }
+
+  runBenchmark(hours: number): Observable<Stats> {
+    return this.http.post<Stats>('/api/stats/benchmark', null, { params: { hours } });
   }
 
   contentUrl(id: string): string {
@@ -53,5 +50,6 @@ export function errorMessage(err: unknown): string {
     if (body?.detail) return `${body.title ?? 'Eroare'}: ${body.detail}`;
     return `Eroare ${err.status} ${err.statusText}`;
   }
+  if (err instanceof Error) return err.message;
   return String(err);
 }

@@ -7,21 +7,56 @@
     </div>
   </div>
 
-  <div class="storages" aria-label="Starea storage-urilor">
-    @if (status(); as s) {
-      @for (t of storageTypes; track t) {
-        <span class="pill" [class.down]="!s.storages[t]?.up">
-          <span class="dot"></span>{{ t }} {{ s.storages[t]?.up ? 'online' : 'indisponibil' }}
-        </span>
+  @if (session.user(); as user) {
+    <div class="storages" aria-label="Starea storage-urilor">
+      @if (status(); as s) {
+        @for (t of storageTypes; track t) {
+          <span class="pill" [class.down]="!s.storages[t]?.up">
+            <span class="dot"></span>{{ t }} {{ s.storages[t]?.up ? 'online' : 'indisponibil' }}
+          </span>
+        }
+      } @else if (statusError()) {
+        <span class="pill down"><span class="dot"></span>Backend indisponibil</span>
       }
-    } @else if (statusError(); as e) {
-      <span class="pill down"><span class="dot"></span>Backend indisponibil</span>
-    }
-  </div>
+      <span class="user">{{ user.displayName }}</span>
+      <button type="button" class="secondary" (click)="session.logout()">Ieșire</button>
+    </div>
+  }
 </header>
 
 <main>
-  <app-upload-panel [policies]="status()?.policies ?? {}" (uploaded)="onUploaded()" />
-
-  <app-file-list [refresh]="refreshTick()" />
+  @if (session.user(); as user) {
+    @if (user.canViewStats || canAudit()) {
+      <nav class="tabs">
+        <button type="button" [class.active]="view() === 'files'" (click)="view.set('files')">Fișiere</button>
+        @if (user.canViewStats) {
+          <button type="button" [class.active]="view() === 'stats'" (click)="view.set('stats')">Statistici</button>
+        }
+        @if (canAudit()) {
+          <button type="button" [class.active]="view() === 'audit'" (click)="view.set('audit')">Audit</button>
+        }
+      </nav>
+    }
+    @switch (view()) {
+      @case ('stats') {
+        <app-stats [canRunBenchmark]="user.canRunBenchmark" />
+      }
+      @case ('audit') {
+        <app-audit />
+      }
+      @default {
+        @if (canUpload()) {
+          <app-upload-panel
+            [policies]="status()?.policies ?? {}"
+            [writable]="user.writableCategories"
+            [chunkSize]="status()?.uploadChunkSizeBytes ?? 5242880"
+            (uploaded)="onUploaded()"
+          />
+        }
+        <app-file-list [refresh]="refreshTick()" [readable]="user.readableCategories" />
+      }
+    }
+  } @else if (session.loaded()) {
+    <app-login />
+  }
 </main>

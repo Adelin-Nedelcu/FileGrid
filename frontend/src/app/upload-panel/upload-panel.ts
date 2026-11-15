@@ -1,10 +1,9 @@
-import { Component, computed, inject, input, output, signal } from '@angular/core';
-import { HttpEventType } from '@angular/common/http';
+import { Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Subscription } from 'rxjs';
-import { FileGridApi, errorMessage } from '../filegrid-api';
+import { errorMessage } from '../filegrid-api';
 import { BytesPipe } from '../bytes.pipe';
 import { CATEGORY_LABELS, DataCategory, FileRecord, MANUAL_CATEGORIES, Policy, REGIONS } from '../models';
+import { UploadCancelled, UploadTask, Uploader } from '../uploader';
 
 @Component({
   selector: 'app-upload-panel',
@@ -13,14 +12,16 @@ import { CATEGORY_LABELS, DataCategory, FileRecord, MANUAL_CATEGORIES, Policy, R
   styleUrl: './upload-panel.css',
 })
 export class UploadPanel {
-  private readonly api = inject(FileGridApi);
+  private readonly uploader = inject(Uploader);
 
   readonly policies = input<Partial<Record<DataCategory, Policy>>>({});
+  readonly writable = input<DataCategory[]>([]);
+  readonly chunkSize = input(5 * 1024 * 1024);
   readonly uploaded = output<FileRecord>();
 
-  protected readonly categories = MANUAL_CATEGORIES;
   protected readonly labels = CATEGORY_LABELS;
   protected readonly regions = REGIONS;
+  protected readonly categories = computed(() => MANUAL_CATEGORIES.filter((c) => this.writable().includes(c)));
 
   protected readonly category = signal<DataCategory>('INCIDENT_RECORDING');
   protected readonly region = signal('');
@@ -28,6 +29,7 @@ export class UploadPanel {
   protected readonly file = signal<File | null>(null);
 
   protected readonly progress = signal<number | null>(null);
+  protected readonly note = signal<string | null>(null);
   protected readonly busy = signal(false);
   protected readonly result = signal<FileRecord | null>(null);
   protected readonly error = signal<string | null>(null);
@@ -39,58 +41,63 @@ export class UploadPanel {
     return !!f && !!p && f.size > p.maxFileSizeBytes;
   });
 
-  private idempotencyKey: string | null = null;
-  private subscription: Subscription | null = null;
+  private task: UploadTask | null = null;
+
+  constructor() {
+    effect(() => {
+      const available = this.categories();
+      if (available.length > 0 && !available.includes(this.category())) {
+        this.category.set(available[0]);
+      }
+    });
+  }
 
   protected onFileSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     this.file.set(input.files?.[0] ?? null);
-    this.idempotencyKey = null;
     this.result.set(null);
     this.error.set(null);
     this.progress.set(null);
+    this.note.set(null);
   }
 
   protected upload(): void {
     const file = this.file();
     if (!file || this.busy() || this.tooLarge()) return;
 
-    this.idempotencyKey ??= crypto.randomUUID();
     this.busy.set(true);
     this.error.set(null);
     this.result.set(null);
     this.progress.set(0);
+    this.note.set(null);
 
-    this.subscription = this.api
-      .upload(file, {
-        category: this.category(),
-        region: this.region(),
-        description: this.description(),
-        idempotencyKey: this.idempotencyKey,
-      })
-      .subscribe({
-        next: (event) => {
-          if (event.type === HttpEventType.UploadProgress && event.total) {
-            this.progress.set(Math.round((100 * event.loaded) / event.total));
-          } else if (event.type === HttpEventType.Response && event.body) {
-            this.progress.set(100);
-            this.result.set(event.body);
-            this.uploaded.emit(event.body);
-            this.idempotencyKey = null;
-          }
-        },
-        error: (err) => {
-          this.error.set(errorMessage(err));
-          this.busy.set(false);
-        },
-        complete: () => this.busy.set(false),
-      });
+    const task = this.uploader.start(
+      file,
+      { category: this.category(), region: this.region(), description: this.description() },
+      this.chunkSize(),
+      (p) => {
+        this.progress.set(p.total > 0 ? Math.floor((100 * p.loaded) / p.total) : 0);
+        this.note.set(p.note);
+      },
+    );
+    this.task = task;
+    task.result.then(
+      (stored) => {
+        this.progress.set(100);
+        this.note.set(null);
+        this.result.set(stored);
+        this.uploaded.emit(stored);
+        this.busy.set(false);
+      },
+      (err) => {
+        this.note.set(null);
+        this.error.set(err instanceof UploadCancelled ? 'Upload anulat.' : errorMessage(err));
+        this.busy.set(false);
+      },
+    );
   }
 
   protected cancel(): void {
-    this.subscription?.unsubscribe();
-    this.subscription = null;
-    this.busy.set(false);
-    this.error.set('Upload anulat. Poți relua cu „Reîncearcă”.');
+    this.task?.cancel();
   }
 }

@@ -11,6 +11,6 @@ export class BytesPipe implements PipeTransform {
       v /= 1024;
       i++;
     }
-    return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+    return `${v.toFixed(i === 0 ? 0 : 1).replace('.', ',')} ${units[i]}`;
   }
 }

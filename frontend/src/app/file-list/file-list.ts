@@ -1,9 +1,10 @@
-import { Component, effect, inject, input, signal, untracked } from '@angular/core';
+import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FileGridApi, errorMessage } from '../filegrid-api';
 import { BytesPipe } from '../bytes.pipe';
-import { ALL_CATEGORIES, CATEGORY_LABELS, DataCategory, FileRecord, REGIONS, VerificationResult, regionName } from '../models';
+import { canResumeDownloads, resumableDownload } from '../downloader';
+import { ALL_CATEGORIES, CATEGORY_LABELS, DataCategory, MANUAL_CATEGORIES, FileRecord, REGIONS, VerificationResult, regionName } from '../models';
 
 @Component({
   selector: 'app-file-list',
@@ -15,8 +16,10 @@ export class FileList {
   private readonly api = inject(FileGridApi);
 
   readonly refresh = input(0);
+  readonly readable = input<DataCategory[]>([]);
 
-  protected readonly categories = ALL_CATEGORIES;
+  protected readonly categories = computed(() => ALL_CATEGORIES.filter((c) => this.readable().includes(c)));
+  protected readonly manual = computed(() => MANUAL_CATEGORIES.filter((c) => this.readable().includes(c)));
   protected readonly labels = CATEGORY_LABELS;
   protected readonly regions = REGIONS;
   protected readonly regionName = regionName;
@@ -32,11 +35,14 @@ export class FileList {
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly verifications = signal<Record<string, VerificationResult | 'pending' | string>>({});
+  protected readonly downloads = signal<Record<string, { text: string; failed: boolean; done: boolean }>>({});
+  protected readonly resumable = canResumeDownloads();
 
   constructor() {
     effect(() => {
       this.refresh();
       this.page();
+      this.readable();
       untracked(() => this.load());
     });
   }
@@ -50,11 +56,18 @@ export class FileList {
   }
 
   protected load(): void {
+    const selected = this.category();
+    const categories = selected ? [selected] : this.manual().length > 0 ? this.manual() : this.categories();
+    if (categories.length === 0) {
+      this.items.set([]);
+      this.total.set(0);
+      return;
+    }
     this.loading.set(true);
     this.error.set(null);
     this.api
       .search({
-        category: this.category(),
+        categories,
         region: this.region(),
         q: this.query(),
         page: this.page(),
@@ -87,6 +100,33 @@ export class FileList {
 
   protected isResult(v: unknown): v is VerificationResult {
     return typeof v === 'object' && v !== null && 'match' in v;
+  }
+
+  protected isDownloading(id: string): boolean {
+    const state = this.downloads()[id];
+    return !!state && !state.failed && !state.done;
+  }
+
+  protected download(file: FileRecord): void {
+    const set = (text: string, failed = false, done = false) =>
+      this.downloads.update((d) => ({ ...d, [file.id]: { text, failed, done } }));
+    const size = file.sizeBytes ?? 0;
+    set('Alegeți unde se salvează…');
+    resumableDownload(this.api.contentUrl(file.id), file.name, size, (p) =>
+      set(p.note ?? `${p.total > 0 ? Math.floor((p.loaded * 100) / p.total) : 100}% descărcat`),
+    )
+      .then((saved) => {
+        if (saved) {
+          set('Descărcat complet', false, true);
+        } else {
+          this.downloads.update((d) => {
+            const rest = { ...d };
+            delete rest[file.id];
+            return rest;
+          });
+        }
+      })
+      .catch((err) => set(errorMessage(err), true));
   }
 
   protected contentUrl(id: string): string {

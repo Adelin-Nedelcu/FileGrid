@@ -1,0 +1,17 @@
+<section class="card login">
+  <h2>Autentificare</h2>
+  <form (ngSubmit)="submit()">
+    <label>
+      Utilizator
+      <input type="text" name="username" [(ngModel)]="username" autocomplete="username" autofocus />
+    </label>
+    <label>
+      Parolă
+      <input type="password" name="password" [(ngModel)]="password" autocomplete="current-password" />
+    </label>
+    <button type="submit" [disabled]="busy()">Intră</button>
+  </form>
+  @if (error(); as e) {
+    <p class="error">{{ e }}</p>
+  }
+</section>

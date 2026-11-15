@@ -1,0 +1,66 @@
+<section class="card">
+  <h2>Jurnal de audit</h2>
+  <p class="muted">Cine a accesat documentele protejate, când, de unde și cu ce rezultat.</p>
+
+  <form class="filters" (ngSubmit)="search()">
+    <select [ngModel]="action()" name="action" (ngModelChange)="action.set($event); search()">
+      <option value="">Toate acțiunile</option>
+      @for (code of actionCodes; track code) {
+        <option [value]="code">{{ actions[code] }}</option>
+      }
+    </select>
+    <input type="search" [(ngModel)]="query" name="q" placeholder="Caută după fișier, utilizator sau id-ul cererii…" />
+    <button type="submit">Caută</button>
+  </form>
+
+  @if (error(); as e) {
+    <p class="error">{{ e }}</p>
+  }
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Când</th>
+          <th>Utilizator</th>
+          <th>Acțiune</th>
+          <th>Fișier</th>
+          <th>Rezultat</th>
+          <th>Adresă IP</th>
+          <th>Id cerere</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (e of items(); track e.id) {
+          <tr>
+            <td class="nowrap">{{ e.occurredAt | date: 'dd.MM.yyyy HH:mm:ss' }}</td>
+            <td>{{ e.actor }}</td>
+            <td>{{ actions[e.action] ?? e.action }}</td>
+            <td class="name">
+              {{ e.fileName }}
+              <div class="muted">{{ labels[e.category] }}</div>
+            </td>
+            <td>
+              <span [class]="e.success ? 'ok' : 'bad'">{{ e.success ? 'reușit' : 'eșuat' }}</span>
+              @if (e.detail) {
+                <div class="muted">{{ e.detail }}</div>
+              }
+            </td>
+            <td class="nowrap">{{ e.clientIp ?? '—' }}</td>
+            <td><code>{{ e.requestId ?? '—' }}</code></td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="7" class="muted center">{{ loading() ? 'Se încarcă…' : 'Nicio înregistrare.' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pager">
+    <button type="button" class="secondary" (click)="page.set(page() - 1)" [disabled]="page() === 0">‹ Anterior</button>
+    <span>Pagina {{ page() + 1 }} din {{ lastPage() + 1 }} · {{ total() }} înregistrări</span>
+    <button type="button" class="secondary" (click)="page.set(page() + 1)" [disabled]="page() >= lastPage()">Următor ›</button>
+  </div>
+</section>

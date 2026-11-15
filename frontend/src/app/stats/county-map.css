@@ -1,0 +1,93 @@
+:host {
+  --map-outside: #eef0f3;
+  display: block;
+}
+
+.map-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+svg {
+  flex: 1 1 26rem;
+  max-width: 44rem;
+  width: 100%;
+  height: auto;
+}
+
+path {
+  stroke: #ffffff;
+  stroke-width: 0.8;
+}
+
+path.served {
+  stroke: #8a5248;
+  stroke-width: 0.9;
+  cursor: pointer;
+}
+
+path.active {
+  stroke: var(--text);
+  stroke-width: 2;
+}
+
+.count {
+  font-size: 13px;
+  font-weight: 700;
+  text-anchor: middle;
+  fill: var(--text);
+  paint-order: stroke;
+  stroke: #ffffff;
+  stroke-width: 3px;
+  pointer-events: none;
+}
+
+.side {
+  flex: 0 1 14rem;
+  display: grid;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.total,
+.side p {
+  margin: 0;
+}
+
+.total b {
+  font-size: 1.4rem;
+}
+
+.detail {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.legend span {
+  display: inline-block;
+  width: 1.1rem;
+  height: 0.8rem;
+  border-radius: 0.2rem;
+  border: 1px solid var(--border);
+}
+
+.legend span.outside {
+  background: var(--map-outside);
+}

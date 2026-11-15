@@ -5,7 +5,7 @@
     <label>
       Categorie
       <select [(ngModel)]="category" [disabled]="busy()">
-        @for (c of categories; track c) {
+        @for (c of categories(); track c) {
           <option [value]="c">{{ labels[c] }}</option>
         }
       </select>
@@ -60,7 +60,7 @@
 
   <div class="actions">
     <button type="button" (click)="upload()" [disabled]="!file() || busy() || tooLarge()">
-      {{ error() ? 'Reîncearcă' : 'Încarcă' }}
+      Încarcă
     </button>
     @if (busy()) {
       <button type="button" class="secondary" (click)="cancel()">Anulează</button>
@@ -74,10 +74,14 @@
     </div>
   }
 
+  @if (note(); as n) {
+    <p class="hint">{{ n }}</p>
+  }
+
   @if (result(); as r) {
     <p class="success">
       @if (r.duplicate) {
-        Fișierul era deja stocat (reîncercare recunoscută, nu s-a creat un duplicat).
+        Fișierul era deja stocat; nu s-a creat un duplicat.
       } @else {
         Stocat în <strong>{{ r.storage }}</strong> ({{ r.sizeBytes | bytes }}).
       }

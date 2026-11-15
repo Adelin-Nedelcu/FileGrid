@@ -40,7 +40,14 @@
 .storages {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
+}
+
+.user {
+  margin-left: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 
 .pill {
@@ -67,6 +74,27 @@
 
 .pill.down .dot {
   background: var(--bad);
+}
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabs button {
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+  padding: 0.5rem 1rem;
+}
+
+.tabs button.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
 }
 
 main {

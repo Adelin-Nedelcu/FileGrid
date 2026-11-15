@@ -3,8 +3,10 @@
 
   <form class="filters" (ngSubmit)="search()">
     <select [ngModel]="category()" name="category" (ngModelChange)="category.set($event); search()">
-      <option value="">Toate categoriile</option>
-      @for (c of categories; track c) {
+      @if (manual().length > 0) {
+        <option value="">Fișiere încărcate</option>
+      }
+      @for (c of categories(); track c) {
         <option [value]="c">{{ labels[c] }}</option>
       }
     </select>
@@ -77,9 +79,16 @@
             </td>
             <td>
               <div class="row-actions">
-                <a [href]="contentUrl(f.id)" download>Descarcă</a>
+                @if (resumable) {
+                  <button type="button" class="link" (click)="download(f)" [disabled]="isDownloading(f.id)">Descarcă</button>
+                } @else {
+                  <a [href]="contentUrl(f.id)" download>Descarcă</a>
+                }
                 <button type="button" class="link" (click)="verify(f)">Verifică</button>
               </div>
+              @if (downloads()[f.id]; as d) {
+                <div [class]="d.failed ? 'bad small' : 'muted'">{{ d.text }}</div>
+              }
             </td>
           </tr>
         } @empty {

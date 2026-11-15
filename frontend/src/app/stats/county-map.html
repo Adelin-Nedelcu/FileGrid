@@ -1,0 +1,51 @@
+<div class="map-wrap">
+  <svg [attr.viewBox]="'0 0 ' + width + ' ' + height" role="img" aria-label="Harta avariilor pe județe">
+    @for (c of counties(); track c.code) {
+      <path
+        [attr.d]="c.d"
+        [attr.fill]="c.fill"
+        [class.served]="c.served"
+        [class.active]="hovered() === c.code"
+        fill-rule="evenodd"
+        (mouseenter)="hovered.set(c.code)"
+        (mouseleave)="hovered.set(null)"
+      >
+        <title>{{ c.name }}{{ c.served ? ': ' + c.incidents + ' avarii' : ' (în afara zonei de distribuție)' }}</title>
+      </path>
+    }
+    @for (c of counties(); track c.code) {
+      @if (c.served && c.incidents > 0) {
+        <text [attr.x]="c.x" [attr.y]="c.y + 4" class="count">{{ c.incidents }}</text>
+      }
+    }
+  </svg>
+
+  <div class="side">
+    <p class="total">
+      <b>{{ total() | number }}</b> avarii raportate în interval
+    </p>
+    @if (selected(); as s) {
+      <div class="detail">
+        <b>{{ s.name }}</b>
+        @if (s.served) {
+          <div>{{ s.incidents | number }} avarii</div>
+          @if (s.anomalies !== null) {
+            <div class="muted">{{ s.anomalies | number: '1.1-1' }} citiri cu anomalii la 1 000</div>
+          }
+        } @else {
+          <div class="muted">În afara zonei de distribuție</div>
+        }
+      </div>
+    } @else {
+      <p class="muted">Treceți cu mouse-ul peste un județ pentru detalii.</p>
+    }
+    @if (legend().length > 0) {
+      <ul class="legend">
+        @for (step of legend(); track step.label) {
+          <li><span [style.background]="step.color"></span>{{ step.label }}</li>
+        }
+        <li><span class="outside"></span>în afara zonei</li>
+      </ul>
+    }
+  </div>
+</div>

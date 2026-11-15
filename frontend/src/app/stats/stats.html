@@ -1,0 +1,364 @@
+<section class="card toolbar">
+  <h2>Statistici</h2>
+  <div class="controls">
+    <select [ngModel]="hours()" name="hours" (ngModelChange)="hours.set(+$event)">
+      @for (w of windows; track w.hours) {
+        <option [value]="w.hours">{{ w.label }}</option>
+      }
+    </select>
+    <button type="button" class="secondary" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Se încarcă…' : 'Actualizează' }}
+    </button>
+  </div>
+</section>
+
+@if (error(); as e) {
+  <p class="error">{{ e }}</p>
+}
+
+@if (stats(); as s) {
+  <section class="card">
+    <div class="head">
+      <h2>Ce storage se potrivește fiecărei categorii</h2>
+      @if (canRunBenchmark()) {
+        <button type="button" (click)="measure()" [disabled]="measuring()">
+          {{ measuring() ? 'Se măsoară (până la un minut)…' : 'Rulează măsurătoarea' }}
+        </button>
+      }
+    </div>
+    <p class="muted">
+      Aceleași fișiere de test sunt scrise, recitite și verificate pe fiecare storage, cu dimensiunea tipică a fiecărei categorii.
+      @if (s.storage.measuredAt) {
+        Ultima măsurătoare: {{ s.storage.measuredAt | date: 'dd.MM.yyyy HH:mm' }}. Cifrele sunt media ultimelor
+        {{ s.storage.runs }} măsurători{{ s.storage.runs < 3 ? ' (rulați-o de 3 ori pentru un rezultat stabil)' : '' }}.
+      }
+    </p>
+    <ul class="conclusions">
+      @for (line of s.storage.summary; track $index) {
+        <li>{{ line }}</li>
+      }
+    </ul>
+
+    @for (c of s.storage.fit; track c.category) {
+      <div class="block">
+        <h3>
+          {{ labels[c.category] }}
+          <span class="tag">politica actuală: {{ c.currentStorage }}</span>
+        </h3>
+        <p class="muted">{{ c.criterion }}</p>
+        <p class="verdict">{{ c.verdict }}</p>
+        @if (c.measurements.length > 0) {
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Storage</th>
+                  <th class="num">Scriere (mediana)</th>
+                  <th class="num">Scriere p95</th>
+                  <th class="num">Citire (mediana)</th>
+                  <th class="num">Citire p95</th>
+                  <th class="num">Debit scriere</th>
+                  <th class="num">Debit citire</th>
+                  <th>Observații</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (m of c.measurements; track m.storage) {
+                  <tr [class.best]="m.storage === c.recommendedStorage">
+                    <td>
+                      {{ m.storage }}
+                      @if (m.storage === c.recommendedStorage) {
+                        <span class="tag">recomandat</span>
+                      }
+                      @if (m.storage === c.fastestStorage && m.storage !== c.recommendedStorage) {
+                        <span class="tag muted-tag">cel mai rapid</span>
+                      }
+                    </td>
+                    <td class="num">{{ ms(m.writeP50Ms) }}</td>
+                    <td class="num">{{ ms(m.writeP95Ms) }}</td>
+                    <td class="num">{{ ms(m.readP50Ms) }}</td>
+                    <td class="num">{{ ms(m.readP95Ms) }}</td>
+                    <td class="num">{{ m.writeMbPerS === null ? '—' : (m.writeMbPerS | number: '1.1-1') + ' MB/s' }}</td>
+                    <td class="num">{{ m.readMbPerS === null ? '—' : (m.readMbPerS | number: '1.1-1') + ' MB/s' }}</td>
+                    <td class="muted">{{ m.note ?? m.files + ' fișiere × ' + (m.fileSizeBytes | bytes) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    }
+
+    <div class="block">
+      <h3>Traficul real din interval</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Categorie</th>
+              <th>Storage</th>
+              <th class="num">Fișiere</th>
+              <th class="num">Volum</th>
+              <th class="num">Durată p50</th>
+              <th class="num">Durată p95</th>
+              <th class="num">Eșuate</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (u of s.storage.live; track u.category + u.storage) {
+              <tr>
+                <td>{{ labels[u.category] }}</td>
+                <td>{{ u.storage }}</td>
+                <td class="num">{{ u.files | number }}</td>
+                <td class="num">{{ u.bytes | bytes }}</td>
+                <td class="num">{{ ms(u.p50Ms) }}</td>
+                <td class="num">{{ ms(u.p95Ms) }}</td>
+                <td class="num" [class.bad]="u.failed > 0">{{ u.failed | number }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="7" class="muted center">Niciun fișier în interval.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Vârf comparat cu funcționarea normală</h2>
+    <ul class="conclusions">
+      @for (line of s.load.conclusions; track $index) {
+        <li>{{ line }}</li>
+      }
+    </ul>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th rowspan="2">Categorie</th>
+            <th colspan="3" class="group">Normal</th>
+            <th colspan="5" class="group">Vârf</th>
+          </tr>
+          <tr>
+            <th class="num">Fișiere/min</th>
+            <th class="num">Durată p50</th>
+            <th class="num">Durată p95</th>
+            <th class="num">Minute</th>
+            <th class="num">Fișiere/min</th>
+            <th class="num">Durată p50</th>
+            <th class="num">Durată p95</th>
+            <th class="num">Eșuate</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (c of s.load.categories; track c.category) {
+            <tr>
+              <td>{{ labels[c.category] }}</td>
+              <td class="num">{{ c.normal ? (c.normal.filesPerMinute | number: '1.0-1') : '—' }}</td>
+              <td class="num">{{ ms(c.normal?.p50Ms) }}</td>
+              <td class="num">{{ ms(c.normal?.p95Ms) }}</td>
+              <td class="num">{{ c.peak ? c.peak.minutes : '—' }}</td>
+              <td class="num">{{ c.peak ? (c.peak.filesPerMinute | number: '1.0-1') : '—' }}</td>
+              <td class="num">{{ ms(c.peak?.p50Ms) }}</td>
+              <td class="num">{{ ms(c.peak?.p95Ms) }}</td>
+              <td class="num" [class.bad]="(c.peak?.failed ?? 0) > 0">{{ c.peak ? c.peak.failed : '—' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="block">
+      <h3>Perioada de vârf comparată cu una obișnuită</h3>
+      <p class="muted">
+        Alegeți „Ultimele 7 zile” ca să comparați zile întregi. O perioadă e marcată „vârf” dacă o categorie are cel puțin
+        de 3 ori volumul ei obișnuit (mediana perioadelor din interval).
+      </p>
+      <ul class="conclusions">
+        @for (line of s.timeline.conclusions; track $index) {
+          <li>{{ line }}</li>
+        }
+      </ul>
+      @if (timelineCategories().length > 0) {
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>{{ unitLabels[s.timeline.unit] }}</th>
+                @for (c of timelineCategories(); track c) {
+                  <th>{{ labels[c] }}</th>
+                }
+                <th class="num">Eșuate</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (b of s.timeline.buckets; track b.start) {
+                <tr [class.peak-row]="b.peak">
+                  <td class="nowrap">
+                    {{ b.start | date: bucketFormat(s.timeline.unit) }}
+                    @if (b.peak) {
+                      <span class="tag warn-tag">vârf</span>
+                    }
+                  </td>
+                  @for (c of timelineCategories(); track c) {
+                    <td>
+                      <div class="bar" [class.warn]="b.categories[c].peak">
+                        <span [style.width]="width(b.categories[c].stored, timelineMax()[c] ?? 1)"></span>
+                        <b>{{ b.categories[c].stored | number }}</b>
+                      </div>
+                      @if (b.categories[c].p95Ms !== null) {
+                        <div class="muted small">p95 {{ ms(b.categories[c].p95Ms) }}</div>
+                      }
+                    </td>
+                  }
+                  <td class="num" [class.bad]="b.failed > 0">{{ b.failed | number }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Ce spun datele despre rețea</h2>
+    <ul class="conclusions">
+      @for (line of s.network.conclusions; track $index) {
+        <li>{{ line }}</li>
+      }
+    </ul>
+    <p class="muted">{{ s.network.readingsAnalyzed | number }} citiri de contor analizate în interval.</p>
+
+    <div class="block">
+      <h3>Harta avariilor pe județe</h3>
+      <app-county-map [regions]="s.network.regions" />
+    </div>
+
+    <div class="block">
+      <h3>Pe zone</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Zonă</th>
+              <th class="num">Contoare</th>
+              <th>Citiri cu anomalii la 1 000</th>
+              <th class="num">Întreruperi</th>
+              <th class="num">Tensiune scăzută</th>
+              <th class="num">Vârfuri de consum</th>
+              <th>Avarii raportate</th>
+              <th class="num">Inspecții cu drona</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (r of s.network.regions; track r.region) {
+              <tr>
+                <td>{{ r.name }}</td>
+                <td class="num">{{ r.meters | number }}</td>
+                <td>
+                  <div class="bar">
+                    <span [style.width]="width(r.anomaliesPer1000, maxAnomalies())"></span>
+                    <b>{{ r.anomaliesPer1000 | number: '1.1-1' }}</b>
+                  </div>
+                </td>
+                <td class="num">{{ r.outages | number }}</td>
+                <td class="num">{{ r.sags | number }}</td>
+                <td class="num">{{ r.spikes | number }}</td>
+                <td>
+                  <div class="bar warn">
+                    <span [style.width]="width(r.incidents, maxIncidents())"></span>
+                    <b>{{ r.incidents | number }}</b>
+                  </div>
+                </td>
+                <td class="num">{{ r.droneVideos | number }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="8" class="muted center">Nu există date în interval.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    @if (s.network.problemMeters.length > 0) {
+      <div class="block">
+        <h3>Contoare cu anomalii repetate</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Contor</th>
+                <th>Zonă</th>
+                <th>Tip consumator</th>
+                <th class="num">Citiri afectate</th>
+                <th class="num">Întreruperi</th>
+                <th class="num">Tensiune scăzută</th>
+                <th class="num">Vârfuri de consum</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (m of s.network.problemMeters; track m.meterId) {
+                <tr>
+                  <td>{{ m.meterId }}</td>
+                  <td>{{ regionName(m.region) }}</td>
+                  <td>{{ consumerLabels[m.consumerType ?? ''] ?? '—' }}</td>
+                  <td class="num">{{ m.affected | number }} din {{ m.readings | number }}</td>
+                  <td class="num">{{ m.outages | number }}</td>
+                  <td class="num">{{ m.sags | number }}</td>
+                  <td class="num">{{ m.spikes | number }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+
+    @if (s.network.silentMeters > 0) {
+      <div class="block">
+        <h3>Contoare care nu mai transmit ({{ s.network.silentMeters }})</h3>
+        <p class="muted">
+          @for (m of s.network.silentSample; track m.meterId) {
+            {{ m.meterId }} ({{ regionName(m.region) }}, ultima citire {{ m.lastSeen | date: 'dd.MM HH:mm' }}){{ $last ? '' : ' · ' }}
+          }
+        </p>
+      </div>
+    }
+
+    @if (s.network.consumers.length > 0) {
+      <div class="block">
+        <h3>Pe tipuri de consumatori</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Tip</th>
+                <th class="num">Contoare</th>
+                <th class="num">Citiri</th>
+                <th class="num">Sarcină medie</th>
+                <th class="num">Sarcină maximă</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (c of s.network.consumers; track c.type) {
+                <tr>
+                  <td>{{ consumerLabels[c.type] ?? c.type }}</td>
+                  <td class="num">{{ c.meters | number }}</td>
+                  <td class="num">{{ c.readings | number }}</td>
+                  <td class="num">{{ c.avgKw === null ? '—' : (c.avgKw | number: '1.1-1') + ' kW' }}</td>
+                  <td class="num">{{ c.maxKw === null ? '—' : (c.maxKw | number: '1.1-1') + ' kW' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+  </section>
+}

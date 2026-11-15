@@ -97,10 +97,160 @@ export interface Policy {
 export interface SystemStatus {
   storages: Partial<Record<StorageType, { up: boolean; checkedAt: string | null }>>;
   policies: Partial<Record<DataCategory, Policy>>;
+  uploadChunkSizeBytes: number;
+}
+
+export interface Session {
+  username: string;
+  displayName: string;
+  roles: string[];
+  readableCategories: DataCategory[];
+  writableCategories: DataCategory[];
+  canViewStats: boolean;
+  canRunBenchmark: boolean;
+}
+
+export interface AuditEntry {
+  id: number;
+  fileId: string;
+  fileName: string;
+  category: DataCategory;
+  action: string;
+  actor: string;
+  clientIp: string | null;
+  requestId: string | null;
+  success: boolean;
+  detail: string | null;
+  occurredAt: string;
+}
+
+export interface StorageMeasurement {
+  storage: StorageType;
+  files: number;
+  fileSizeBytes: number;
+  writeP50Ms: number | null;
+  writeP95Ms: number | null;
+  readP50Ms: number | null;
+  readP95Ms: number | null;
+  writeMbPerS: number | null;
+  readMbPerS: number | null;
+  errors: number;
+  note: string | null;
+  eligible: boolean;
+}
+
+export interface CategoryFit {
+  category: DataCategory;
+  currentStorage: StorageType;
+  fastestStorage: StorageType | null;
+  recommendedStorage: StorageType | null;
+  criterion: string;
+  verdict: string;
+  measurements: StorageMeasurement[];
+}
+
+export interface LiveUsage {
+  category: DataCategory;
+  storage: StorageType;
+  files: number;
+  bytes: number;
+  p50Ms: number | null;
+  p95Ms: number | null;
+  failed: number;
+}
+
+export interface LoadPhase {
+  minutes: number;
+  stored: number;
+  failed: number;
+  bytes: number;
+  filesPerMinute: number;
+  p50Ms: number | null;
+  p95Ms: number | null;
+}
+
+export interface CategoryLoad {
+  category: DataCategory;
+  normal: LoadPhase | null;
+  peak: LoadPhase | null;
+}
+
+export interface RegionStat {
+  region: string;
+  name: string;
+  readings: number;
+  meters: number;
+  avgKw: number | null;
+  outages: number;
+  sags: number;
+  spikes: number;
+  anomaliesPer1000: number;
+  incidents: number;
+  droneVideos: number;
+}
+
+export interface ConsumerStat {
+  type: string;
+  readings: number;
+  meters: number;
+  avgKw: number | null;
+  maxKw: number | null;
+}
+
+export interface MeterIssue {
+  meterId: string;
+  region: string | null;
+  consumerType: string | null;
+  readings: number;
+  outages: number;
+  sags: number;
+  spikes: number;
+  affected: number;
+}
+
+export interface TimelineCell {
+  stored: number;
+  failed: number;
+  p95Ms: number | null;
+  peak: boolean;
+}
+
+export interface TimelineBucket {
+  start: string;
+  categories: Record<DataCategory, TimelineCell>;
+  stored: number;
+  failed: number;
+  peak: boolean;
+}
+
+export interface Stats {
+  hours: number;
+  generatedAt: string;
+  storage: { measuredAt: string | null; runs: number; fit: CategoryFit[]; live: LiveUsage[]; summary: string[] };
+  load: { categories: CategoryLoad[]; conclusions: string[] };
+  timeline: { unit: '5min' | '30min' | 'hour' | 'day'; buckets: TimelineBucket[]; conclusions: string[] };
+  network: {
+    readingsAnalyzed: number;
+    regions: RegionStat[];
+    consumers: ConsumerStat[];
+    problemMeters: MeterIssue[];
+    silentMeters: number;
+    silentSample: { meterId: string; region: string | null; lastSeen: string }[];
+    conclusions: string[];
+  };
+}
+
+export interface UploadSession {
+  id: string;
+  completed: boolean;
+  partSize: number;
+  partCount: number;
+  receivedParts: number[];
+  file: FileRecord | null;
 }
 
 export interface FileSearch {
-  category?: DataCategory | '';
+  categories?: DataCategory[];
   q?: string;
   region?: string;
   page?: number;
